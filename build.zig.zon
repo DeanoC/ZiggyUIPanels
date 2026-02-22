@@ -1,0 +1,16 @@
+.{
+    .name = .ziggy_ui_panels,
+    .version = "0.1.0",
+    .fingerprint = 0xeced46b8a97b1b66,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "README.md",
+        "AGENTS.md",
+        "LICENSE",
+        ".github/workflows",
+    },
+}
