@@ -25,6 +25,9 @@ pub const DrawResult = struct {
     agent_id: ?[]const u8 = null,
 };
 
+// Host-parameterized panel implementations.
+pub const showcase_panel = @import("panels/showcase_panel.zig");
+
 pub const version = "0.1.0";
 
 test "attachment deinit frees optional buffers" {
