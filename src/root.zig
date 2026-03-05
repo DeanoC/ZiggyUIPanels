@@ -25,6 +25,10 @@ pub const DrawResult = struct {
     agent_id: ?[]const u8 = null,
 };
 
+pub const launcher = @import("contracts/launcher.zig");
+pub const ide_menu = @import("contracts/ide_menu.zig");
+pub const settings_tree = @import("contracts/settings_tree.zig");
+
 // Host-parameterized panel implementations.
 pub const showcase_panel = @import("panels/showcase_panel.zig");
 
