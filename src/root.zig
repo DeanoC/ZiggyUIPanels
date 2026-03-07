@@ -29,8 +29,16 @@ pub const launcher = @import("contracts/launcher.zig");
 pub const ide_menu = @import("contracts/ide_menu.zig");
 pub const settings_tree = @import("contracts/settings_tree.zig");
 
-// Host-parameterized panel implementations.
+// Host-parameterized reusable panel implementations.
 pub const showcase_panel = @import("panels/showcase_panel.zig");
+pub const launcher_settings_panel = @import("panels/launcher_settings_panel.zig");
+pub const chat_workspace_panel = @import("panels/chat_workspace_panel.zig");
+pub const filesystem_panel = @import("panels/filesystem_panel.zig");
+pub const project_panel = @import("panels/project_panel.zig");
+pub const debug_panel = @import("panels/debug_panel.zig");
+pub const debug_event_stream = @import("panels/debug_event_stream.zig");
+pub const terminal_panel = @import("panels/terminal_panel.zig");
+pub const terminal_output_panel = @import("panels/terminal_output_panel.zig");
 
 pub const version = "0.1.0";
 
