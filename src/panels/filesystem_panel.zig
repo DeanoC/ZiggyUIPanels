@@ -14,6 +14,7 @@ pub const FocusField = enum {
 
 pub const State = struct {
     focused_field: FocusField = .none,
+    entry_page: usize = 0,
 };
 
 pub const PointerState = struct {
@@ -177,10 +178,61 @@ pub fn draw(
 
     const list_row_h = @max(layout.button_height * 0.8, layout.line_height + inner * 0.9);
     const list_row_gap = @max(1.0, inner * 0.35);
+    const list_step = list_row_h + list_row_gap;
+    const listing_inner_height = @max(0.0, listing_rect.height() - inner * 2.0);
+    const rows_without_pager = @max(1, @as(usize, @intFromFloat(@floor((listing_inner_height + list_row_gap) / list_step))));
+    const pager_h = row_h;
+    const pager_gap = layout.row_gap * 0.45;
+    const needs_pager = view.entries.len > rows_without_pager;
+    const rows_per_page = if (needs_pager)
+        @max(1, @as(usize, @intFromFloat(@floor((@max(0.0, listing_inner_height - pager_h - pager_gap) + list_row_gap) / list_step))))
+    else
+        rows_without_pager;
+    const page_count = @max(1, std.math.divCeil(usize, view.entries.len, rows_per_page) catch 1);
+    if (state.entry_page >= page_count) state.entry_page = page_count - 1;
+
     var list_y = listing_rect.min[1] + inner;
-    const max_rows: usize = @min(view.entries.len, 14);
-    var idx: usize = 0;
-    while (idx < max_rows and idx < view.entries.len) : (idx += 1) {
+    if (needs_pager) {
+        const pager_button_w: f32 = @max(72.0, @min(96.0, listing_rect.width() * 0.18));
+        const prev_rect = Rect.fromXYWH(listing_rect.min[0] + inner, list_y, pager_button_w, pager_h);
+        const next_rect = Rect.fromXYWH(listing_rect.max[0] - inner - pager_button_w, list_y, pager_button_w, pager_h);
+        if (host.draw_button(host.ctx, prev_rect, "Prev", .{ .variant = .secondary, .disabled = state.entry_page == 0 })) {
+            state.entry_page -= 1;
+        }
+        if (host.draw_button(host.ctx, next_rect, "Next", .{ .variant = .secondary, .disabled = state.entry_page + 1 >= page_count })) {
+            state.entry_page += 1;
+        }
+
+        var page_buf: [80]u8 = undefined;
+        const start_ordinal = state.entry_page * rows_per_page + 1;
+        const end_ordinal = @min(view.entries.len, (state.entry_page + 1) * rows_per_page);
+        const page_text = std.fmt.bufPrint(&page_buf, "Entries {d}-{d} of {d}", .{ start_ordinal, end_ordinal, view.entries.len }) catch "Entries";
+        host.draw_text_trimmed(
+            host.ctx,
+            prev_rect.max[0] + inner,
+            list_y + @max(0.0, (pager_h - layout.line_height) * 0.5),
+            @max(0.0, next_rect.min[0] - prev_rect.max[0] - inner * 2.0),
+            page_text,
+            colors.text_secondary,
+        );
+        list_y += pager_h + pager_gap;
+    }
+
+    if (view.entries.len == 0) {
+        host.draw_text_trimmed(
+            host.ctx,
+            listing_rect.min[0] + inner,
+            list_y,
+            listing_rect.width() - inner * 2.0,
+            "No filesystem entries",
+            colors.text_secondary,
+        );
+    }
+
+    const start_idx = @min(view.entries.len, state.entry_page * rows_per_page);
+    const end_idx = @min(view.entries.len, start_idx + rows_per_page);
+    var idx: usize = start_idx;
+    while (idx < end_idx) : (idx += 1) {
         const entry = view.entries[idx];
         const row_rect = Rect.fromXYWH(
             listing_rect.min[0] + inner,
