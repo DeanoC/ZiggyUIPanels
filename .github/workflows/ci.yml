@@ -10,6 +10,10 @@ jobs:
   build-and-test:
     uses: DeanoC/ZiggySpiderweb/.github/workflows/ziggy-shared-ci.yml@main
     with:
+      build_command: |
+        git submodule update --init deps/ziggy-ui
+        git -C deps/ziggy-ui submodule update --init deps/ziggy-core
+        zig build test
       verify_script: |
         if grep -qE '\.path = "\.\./' build.zig.zon; then
           echo "Local parent-path dependencies are not allowed in CI"

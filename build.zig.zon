@@ -1,17 +1,18 @@
-.{
+﻿.{
     .name = .ziggy_ui_panels,
     .version = "0.1.0",
     .fingerprint = 0xeced46b8a97b1b66,
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .ziggy_ui = .{
-            .url = "https://github.com/DeanoC/ziggy-ui/archive/31394660a4597ee40239c7902f4da082b08ef39f.tar.gz",
-            .hash = "ziggy_ui-0.1.0-dS4PqC_58gHpjMxOeRtA4gchGF6FukJ8Ju0lzJm9C5X7",
+            .path = "deps/ziggy-ui",
         },
     },
     .paths = .{
+        ".gitmodules",
         "build.zig",
         "build.zig.zon",
+        "deps",
         "src",
         "README.md",
         "AGENTS.md",
@@ -19,3 +20,5 @@
         ".github/workflows",
     },
 }
+
+
