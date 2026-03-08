@@ -17,6 +17,12 @@ pub const State = struct {
     focused_field: FocusField = .none,
 };
 
+pub const PointerState = struct {
+    mouse_x: f32,
+    mouse_y: f32,
+    mouse_released: bool,
+};
+
 pub const ThemeColors = struct {
     text_primary: [4]f32,
     text_secondary: [4]f32,
@@ -41,6 +47,7 @@ pub fn draw(
     layout: form_layout.Metrics,
     model: interfaces.FilesystemToolsPanelModel,
     view: interfaces.FilesystemToolsPanelView,
+    pointer: PointerState,
     colors: ThemeColors,
     state: *State,
 ) ?interfaces.FilesystemToolsPanelAction {
@@ -61,13 +68,13 @@ pub fn draw(
         const runtime_rect = Rect.fromXYWH(rect.min[0] + pad, content_y, runtime_w, content_h);
         const contract_rect = Rect.fromXYWH(runtime_rect.max[0] + gap, content_y, rect.max[0] - runtime_rect.max[0] - gap - pad, content_h);
         drawRuntimeTools(host, runtime_rect, layout, model, colors, &action);
-        drawContractTools(host, contract_rect, layout, model, view, colors, state, &action);
+        drawContractTools(host, contract_rect, layout, model, view, pointer, colors, state, &action);
     } else {
         const runtime_h = @min(120.0, content_h * 0.36);
         const runtime_rect = Rect.fromXYWH(rect.min[0] + pad, content_y, rect.width() - pad * 2.0, runtime_h);
         const contract_rect = Rect.fromXYWH(rect.min[0] + pad, runtime_rect.max[1] + gap, rect.width() - pad * 2.0, @max(0.0, rect.max[1] - runtime_rect.max[1] - gap - pad));
         drawRuntimeTools(host, runtime_rect, layout, model, colors, &action);
-        drawContractTools(host, contract_rect, layout, model, view, colors, state, &action);
+        drawContractTools(host, contract_rect, layout, model, view, pointer, colors, state, &action);
     }
 
     return action;
@@ -129,6 +136,7 @@ fn drawContractTools(
     layout: form_layout.Metrics,
     model: interfaces.FilesystemToolsPanelModel,
     view: interfaces.FilesystemToolsPanelView,
+    pointer: PointerState,
     colors: ThemeColors,
     state: *State,
     action: *?interfaces.FilesystemToolsPanelAction,
@@ -162,6 +170,12 @@ fn drawContractTools(
     const payload_rect = Rect.fromXYWH(rect.min[0] + inner, y, rect.width() - inner * 2.0, row_h);
     const payload_focused = host.draw_text_input(host.ctx, payload_rect, view.contract_payload, state.focused_field == .contract_payload, .{ .placeholder = "{\"tool_name\":\"memory_search\",\"arguments\":{\"query\":\"...\"}}" });
     if (payload_focused) state.focused_field = .contract_payload;
+    if (pointer.mouse_released and
+        state.focused_field == .contract_payload and
+        !payload_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }))
+    {
+        state.focused_field = .none;
+    }
     y += row_h + layout.row_gap * 0.45;
 
     const invoke_rect = Rect.fromXYWH(rect.min[0] + inner, y, button_w, row_h);
