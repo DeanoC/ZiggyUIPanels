@@ -34,6 +34,7 @@ pub const showcase_panel = @import("panels/showcase_panel.zig");
 pub const launcher_settings_panel = @import("panels/launcher_settings_panel.zig");
 pub const chat_workspace_panel = @import("panels/chat_workspace_panel.zig");
 pub const filesystem_panel = @import("panels/filesystem_panel.zig");
+pub const filesystem_tools_panel = @import("panels/filesystem_tools_panel.zig");
 pub const project_panel = @import("panels/project_panel.zig");
 pub const debug_panel = @import("panels/debug_panel.zig");
 pub const debug_event_stream = @import("panels/debug_event_stream.zig");
