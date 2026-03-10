@@ -5,15 +5,12 @@ const Rect = zui.core.Rect;
 const form_layout = zui.ui.layout.form_layout;
 const interfaces = zui.ui.panel_interfaces;
 
-// Reusable launcher/workspace settings form built on shared settings contracts.
 pub const FocusField = enum {
     none,
     server_url,
     default_session,
     default_agent,
-    ui_theme,
-    ui_profile,
-    ui_theme_pack,
+    theme_pack,
 };
 
 pub const Variant = enum {
@@ -25,9 +22,7 @@ pub const TextFields = struct {
     server_url: []const u8 = "",
     default_session: []const u8 = "",
     default_agent: []const u8 = "",
-    ui_theme: []const u8 = "",
-    ui_profile: []const u8 = "",
-    ui_theme_pack: []const u8 = "",
+    theme_pack: []const u8 = "",
 };
 
 pub const PointerState = struct {
@@ -83,6 +78,10 @@ pub fn draw(
     };
     host.draw_form_section_title(host.ctx, rect.min[0] + pad, &y, input_width, layout, title);
 
+    var server_rect = Rect.fromXYWH(0.0, 0.0, 0.0, 0.0);
+    var default_session_rect = Rect.fromXYWH(0.0, 0.0, 0.0, 0.0);
+    var default_agent_rect = Rect.fromXYWH(0.0, 0.0, 0.0, 0.0);
+
     if (variant == .workspace) {
         host.draw_text_trimmed(
             host.ctx,
@@ -95,15 +94,16 @@ pub fn draw(
         y += layout.line_height + layout.section_gap * 0.5;
     } else {
         host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Server URL");
-        const input_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
-        const url_focused = host.draw_text_input(
+        server_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
+        if (host.draw_text_input(
             host.ctx,
-            input_rect,
+            server_rect,
             fields.server_url,
             state.focused_field == .server_url,
             .{ .placeholder = "ws://127.0.0.1:18790" },
-        );
-        if (url_focused) state.focused_field = .server_url;
+        )) {
+            state.focused_field = .server_url;
+        }
 
         y += input_height + pad * 0.5;
         host.draw_label(host.ctx, rect.min[0] + pad, y, "Connect role", colors.text_primary);
@@ -138,83 +138,95 @@ pub fn draw(
 
         y += 18.0 * ui_scale + pad * 0.5;
         host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Default session");
-        const default_session_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
-        const default_session_focused = host.draw_text_input(
+        default_session_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
+        if (host.draw_text_input(
             host.ctx,
             default_session_rect,
             fields.default_session,
             state.focused_field == .default_session,
             .{ .placeholder = "main" },
-        );
-        if (default_session_focused) state.focused_field = .default_session;
+        )) {
+            state.focused_field = .default_session;
+        }
 
         y += input_height + layout.row_gap;
         host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Default agent");
-        const default_agent_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
-        const default_agent_focused = host.draw_text_input(
+        default_agent_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
+        if (host.draw_text_input(
             host.ctx,
             default_agent_rect,
             fields.default_agent,
             state.focused_field == .default_agent,
             .{ .placeholder = "leave empty for role default" },
-        );
-        if (default_agent_focused) state.focused_field = .default_agent;
-        y += input_height + layout.row_gap;
-
-        if (pointer.mouse_released and
-            isFocusField(state.focused_field) and
-            !input_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
-            !default_session_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
-            !default_agent_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }))
-        {
-            state.focused_field = .none;
+        )) {
+            state.focused_field = .default_agent;
         }
+        y += input_height + layout.row_gap;
     }
 
-    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "UI Theme");
-    const ui_theme_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
-    const ui_theme_focused = host.draw_text_input(
+    host.draw_label(host.ctx, rect.min[0] + pad, y, "Appearance", colors.text_primary);
+    y += 20.0 * ui_scale;
+    host.draw_text_trimmed(
         host.ctx,
-        ui_theme_rect,
-        fields.ui_theme,
-        state.focused_field == .ui_theme,
-        .{ .placeholder = "default" },
+        rect.min[0] + pad,
+        y,
+        input_width,
+        "Theme mode, profile, pack path, and pack reload controls apply live.",
+        colors.text_secondary,
     );
-    if (ui_theme_focused) state.focused_field = .ui_theme;
+    y += layout.line_height + layout.row_gap * 0.6;
+
+    y = drawModeRow(host, rect, y, pad, button_height, layout, colors, model, &action);
+    y = drawProfileRow(host, rect, y, pad, button_height, layout, colors, model, &action);
+
+    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Theme pack path");
+    const theme_pack_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
+    if (host.draw_text_input(
+        host.ctx,
+        theme_pack_rect,
+        fields.theme_pack,
+        state.focused_field == .theme_pack,
+        .{ .placeholder = "themes/zsc_modern_ai" },
+    )) {
+        state.focused_field = .theme_pack;
+    }
 
     y += input_height + layout.row_gap;
-    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "UI Profile");
-    const ui_profile_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
-    const ui_profile_focused = host.draw_text_input(
-        host.ctx,
-        ui_profile_rect,
-        fields.ui_profile,
-        state.focused_field == .ui_profile,
-        .{ .placeholder = "default" },
-    );
-    if (ui_profile_focused) state.focused_field = .ui_profile;
+    y = drawPackActionRow(host, rect, y, pad, button_height, layout, model, &action);
+    y = drawQuickPickRow(host, rect, y, pad, button_height, layout, colors, "Quick picks", model.theme_pack_quick_picks, &action);
+    y = drawQuickPickRow(host, rect, y, pad, button_height, layout, colors, "Recent", model.theme_pack_recent, &action);
+    y = drawQuickPickRow(host, rect, y, pad, button_height, layout, colors, "Installed", model.theme_pack_available, &action);
 
-    y += input_height + layout.row_gap;
-    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "UI Theme Pack");
-    const ui_theme_pack_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
-    const ui_theme_pack_focused = host.draw_text_input(
+    const status_label = switch (model.theme_pack_status_kind) {
+        .idle => "Pack status: Idle",
+        .fetching => "Pack status: Fetching",
+        .ok => "Pack status: OK",
+        .failed => "Pack status: Error",
+    };
+    host.draw_text_trimmed(host.ctx, rect.min[0] + pad, y, input_width, status_label, colors.text_primary);
+    y += layout.line_height;
+    host.draw_text_trimmed(host.ctx, rect.min[0] + pad, y, input_width, model.theme_pack_status_text, colors.text_secondary);
+    y += layout.line_height + layout.row_gap * 0.4;
+    host.draw_text_trimmed(
         host.ctx,
-        ui_theme_pack_rect,
-        fields.ui_theme_pack,
-        state.focused_field == .ui_theme_pack,
-        .{ .placeholder = "" },
+        rect.min[0] + pad,
+        y,
+        input_width,
+        model.theme_pack_meta_text orelse "Pack metadata unavailable until a pack is active.",
+        colors.text_secondary,
     );
-    if (ui_theme_pack_focused) state.focused_field = .ui_theme_pack;
+    y += layout.line_height + layout.row_gap;
 
-    y += input_height + layout.section_gap * 0.55;
-    const watch_button_label = if (model.watch_theme_pack) "Watch Theme Pack: On" else "Watch Theme Pack: Off";
-    const watch_button_rect = Rect.fromXYWH(rect.min[0] + pad, y, @max(220.0, rect_width * 0.62), button_height);
-    if (host.draw_button(host.ctx, watch_button_rect, watch_button_label, .{ .variant = .secondary })) {
-        emitAction(&action, .toggle_watch_theme_pack);
+    if (model.theme_pack_watch_supported) {
+        const watch_label = if (model.watch_theme_pack) "Watch Theme Pack: On" else "Watch Theme Pack: Off";
+        const watch_rect = Rect.fromXYWH(rect.min[0] + pad, y, @max(220.0, rect_width * 0.62), button_height);
+        if (host.draw_button(host.ctx, watch_rect, watch_label, .{ .variant = .secondary })) {
+            emitAction(&action, .toggle_watch_theme_pack);
+        }
+        y += button_height + layout.row_gap;
     }
 
     if (variant == .launcher) {
-        y += button_height + layout.row_gap;
         const auto_connect_label = if (model.auto_connect_on_launch) "Auto Connect: On" else "Auto Connect: Off";
         const auto_connect_rect = Rect.fromXYWH(rect.min[0] + pad, y, @max(220.0, rect_width * 0.52), button_height);
         if (host.draw_button(host.ctx, auto_connect_rect, auto_connect_label, .{ .variant = .secondary })) {
@@ -227,9 +239,9 @@ pub fn draw(
         if (host.draw_button(host.ctx, ws_verbose_rect, ws_verbose_label, .{ .variant = .secondary })) {
             emitAction(&action, .toggle_ws_verbose_logs);
         }
+        y += button_height + layout.row_gap;
     }
 
-    y += button_height + layout.row_gap;
     host.draw_label(host.ctx, rect.min[0] + pad, y, "Terminal renderer", colors.text_primary);
     y += 20.0 * ui_scale;
     const backend_button_width: f32 = @max(120.0, (rect_width - pad * 3.0) * 0.5);
@@ -263,9 +275,10 @@ pub fn draw(
 
     if (pointer.mouse_released and
         isFocusField(state.focused_field) and
-        !ui_theme_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
-        !ui_profile_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
-        !ui_theme_pack_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }))
+        !server_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
+        !default_session_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
+        !default_agent_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
+        !theme_pack_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }))
     {
         state.focused_field = .none;
     }
@@ -333,8 +346,174 @@ pub fn draw(
     return action;
 }
 
+fn drawModeRow(
+    host: Host,
+    rect: Rect,
+    y: f32,
+    pad: f32,
+    button_height: f32,
+    layout: form_layout.Metrics,
+    colors: ThemeColors,
+    model: interfaces.LauncherSettingsModel,
+    action: *?interfaces.LauncherSettingsAction,
+) f32 {
+    host.draw_label(host.ctx, rect.min[0] + pad, y, "Theme mode", colors.text_primary);
+    var row_y = y + 20.0;
+    var x = rect.min[0] + pad;
+    const choices = [_]struct { mode: interfaces.SettingsThemeMode, label: []const u8 }{
+        .{ .mode = .pack_default, .label = "Pack" },
+        .{ .mode = .light, .label = "Light" },
+        .{ .mode = .dark, .label = "Dark" },
+    };
+    for (choices) |choice| {
+        const width = buttonWidth(choice.label, button_height);
+        if (host.draw_button(
+            host.ctx,
+            Rect.fromXYWH(x, row_y, width, button_height),
+            choice.label,
+            .{
+                .variant = if (model.theme_mode == choice.mode) .primary else .secondary,
+                .disabled = model.theme_mode_locked and choice.mode != .pack_default,
+            },
+        )) {
+            emitAction(action, .{ .set_theme_mode = choice.mode });
+        }
+        x += width + layout.row_gap;
+    }
+    row_y += button_height;
+    if (model.theme_mode_locked) {
+        host.draw_text_trimmed(host.ctx, rect.min[0] + pad, row_y, rect.max[0] - rect.min[0] - pad * 2.0, "Pack locks the active mode to its default.", colors.text_secondary);
+        row_y += layout.line_height;
+    }
+    return row_y + layout.row_gap;
+}
+
+fn drawProfileRow(
+    host: Host,
+    rect: Rect,
+    y: f32,
+    pad: f32,
+    button_height: f32,
+    layout: form_layout.Metrics,
+    colors: ThemeColors,
+    model: interfaces.LauncherSettingsModel,
+    action: *?interfaces.LauncherSettingsAction,
+) f32 {
+    host.draw_label(host.ctx, rect.min[0] + pad, y, "Profile", colors.text_primary);
+    var row_y = y + 20.0;
+    var x = rect.min[0] + pad;
+    const choices = [_]struct { profile: interfaces.SettingsThemeProfile, label: []const u8 }{
+        .{ .profile = .auto, .label = "Auto" },
+        .{ .profile = .desktop, .label = "Desktop" },
+        .{ .profile = .phone, .label = "Phone" },
+        .{ .profile = .tablet, .label = "Tablet" },
+        .{ .profile = .fullscreen, .label = "Fullscreen" },
+    };
+    for (choices) |choice| {
+        const width = buttonWidth(choice.label, button_height);
+        if (x + width > rect.max[0] - pad) {
+            row_y += button_height + layout.row_gap * 0.6;
+            x = rect.min[0] + pad;
+        }
+        if (host.draw_button(
+            host.ctx,
+            Rect.fromXYWH(x, row_y, width, button_height),
+            choice.label,
+            .{ .variant = if (model.theme_profile == choice.profile) .primary else .ghost },
+        )) {
+            emitAction(action, .{ .set_theme_profile = choice.profile });
+        }
+        x += width + layout.row_gap * 0.75;
+    }
+    return row_y + button_height + layout.row_gap;
+}
+
+fn drawPackActionRow(
+    host: Host,
+    rect: Rect,
+    y: f32,
+    pad: f32,
+    button_height: f32,
+    layout: form_layout.Metrics,
+    model: interfaces.LauncherSettingsModel,
+    action: *?interfaces.LauncherSettingsAction,
+) f32 {
+    var row_y = y;
+    var x = rect.min[0] + pad;
+    const buttons = [_]struct {
+        label: []const u8,
+        variant: widgets.button.Variant,
+        disabled: bool,
+        action: interfaces.LauncherSettingsAction,
+    }{
+        .{ .label = "Apply", .variant = .primary, .disabled = false, .action = .apply_theme_pack_input },
+        .{ .label = "Reload", .variant = .secondary, .disabled = !model.theme_pack_reload_supported, .action = .reload_theme_pack },
+        .{ .label = "Default", .variant = .ghost, .disabled = false, .action = .disable_theme_pack },
+        .{ .label = "Browse", .variant = .secondary, .disabled = !model.theme_pack_browse_supported, .action = .browse_theme_pack },
+        .{ .label = "Refresh", .variant = .ghost, .disabled = !model.theme_pack_refresh_supported, .action = .refresh_theme_pack_list },
+    };
+    for (buttons) |button| {
+        const width = buttonWidth(button.label, button_height);
+        if (x + width > rect.max[0] - pad) {
+            row_y += button_height + layout.row_gap * 0.6;
+            x = rect.min[0] + pad;
+        }
+        if (host.draw_button(
+            host.ctx,
+            Rect.fromXYWH(x, row_y, width, button_height),
+            button.label,
+            .{ .variant = button.variant, .disabled = button.disabled },
+        )) {
+            emitAction(action, button.action);
+        }
+        x += width + layout.row_gap * 0.75;
+    }
+    return row_y + button_height + layout.row_gap;
+}
+
+fn drawQuickPickRow(
+    host: Host,
+    rect: Rect,
+    y: f32,
+    pad: f32,
+    button_height: f32,
+    layout: form_layout.Metrics,
+    colors: ThemeColors,
+    label: []const u8,
+    picks: []const interfaces.ThemePackQuickPickView,
+    action: *?interfaces.LauncherSettingsAction,
+) f32 {
+    host.draw_text_trimmed(host.ctx, rect.min[0] + pad, y, rect.max[0] - rect.min[0] - pad * 2.0, label, colors.text_secondary);
+    const row_y = y + layout.line_height;
+    if (picks.len == 0) {
+        host.draw_text_trimmed(host.ctx, rect.min[0] + pad, row_y, rect.max[0] - rect.min[0] - pad * 2.0, "(none)", colors.text_secondary);
+        return row_y + layout.line_height + layout.row_gap * 0.6;
+    }
+
+    var x = rect.min[0] + pad;
+    const max_x = rect.max[0] - pad;
+    for (picks) |pick| {
+        const width = buttonWidth(pick.label, button_height);
+        if (x + width > max_x) break;
+        if (host.draw_button(
+            host.ctx,
+            Rect.fromXYWH(x, row_y, width, button_height),
+            pick.label,
+            .{ .variant = if (pick.selected) .primary else .ghost },
+        )) {
+            emitAction(action, .{ .select_theme_pack = pick.value });
+        }
+        x += width + layout.row_gap * 0.75;
+    }
+    return row_y + button_height + layout.row_gap * 0.75;
+}
+
 fn emitAction(slot: *?interfaces.LauncherSettingsAction, next: interfaces.LauncherSettingsAction) void {
     if (slot.* == null) slot.* = next;
+}
+
+fn buttonWidth(label: []const u8, button_height: f32) f32 {
+    return @max(88.0, @min(220.0, @as(f32, @floatFromInt(label.len)) * 8.0 + button_height));
 }
 
 fn applyScroll(host: Host, rect: Rect, pad: f32, rect_width: f32, content_bottom_scrolled: f32, state: *State) void {
@@ -353,9 +532,7 @@ fn isFocusField(field: FocusField) bool {
         .server_url,
         .default_session,
         .default_agent,
-        .ui_theme,
-        .ui_profile,
-        .ui_theme_pack,
+        .theme_pack,
         => true,
         else => false,
     };

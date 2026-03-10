@@ -1,10 +1,11 @@
-﻿const std = @import("std");
+const std = @import("std");
 const zui = @import("ziggy-ui");
 
 const widgets = zui.widgets;
 const Rect = zui.core.Rect;
 const form_layout = zui.ui.layout.form_layout;
 const interfaces = zui.ui.panel_interfaces;
+const ui_theme_runtime = zui.ui.theme_engine.runtime;
 const zcolors = zui.theme.colors;
 
 // Reusable filesystem explorer shell. The host owns filesystem data,
@@ -362,24 +363,17 @@ fn drawEntryRow(
     colors: ThemeColors,
     hovered: bool,
 ) void {
-    const fill = if (entry.selected)
-        zcolors.withAlpha(colors.primary, 0.15)
-    else if (hovered)
-        zcolors.withAlpha(colors.primary, 0.05)
-    else
-        zcolors.withAlpha(colors.surface, 0.0);
-    const border = if (entry.selected)
-        zcolors.blend(colors.border, colors.primary, 0.35)
-    else if (hovered)
-        zcolors.blend(colors.border, colors.primary, 0.14)
-    else
-        zcolors.withAlpha(colors.border, 0.55);
+    const fill = listRowFill(colors, entry.selected, hovered);
+    const border = listRowBorder(colors, entry.selected, hovered);
 
     host.draw_filled_rect(host.ctx, rect, fill);
     host.draw_rect(host.ctx, rect, border);
 
     const text_y = rect.min[1] + @max(0.0, (rect.height() - layout.line_height) * 0.5);
-    const name_color = if (entry.kind == .directory)
+    const selected_text = listRowTextColor(colors, entry.selected);
+    const name_color = if (entry.selected)
+        selected_text
+    else if (entry.kind == .directory)
         zcolors.blend(colors.text_primary, colors.primary, 0.18)
     else
         colors.text_primary;
@@ -394,6 +388,26 @@ fn drawEntryRow(
     host.draw_text_trimmed(host.ctx, cols.type_x, text_y, cols.type_w, type_text, colors.text_secondary);
     if (entry.modified_label) |value| host.draw_text_trimmed(host.ctx, cols.modified_x, text_y, cols.modified_w, value, colors.text_secondary);
     if (entry.size_label) |value| host.draw_text_trimmed(host.ctx, cols.size_x, text_y, cols.size_w, value, colors.text_secondary);
+}
+
+fn listRowFill(colors: ThemeColors, selected: bool, hovered: bool) [4]f32 {
+    const row = ui_theme_runtime.getStyleSheet().list_row;
+    if (selected and hovered) return row.selected_hover_fill orelse row.selected_fill orelse zcolors.withAlpha(colors.primary, 0.2);
+    if (selected) return row.selected_fill orelse zcolors.withAlpha(colors.primary, 0.15);
+    if (hovered) return row.hover_fill orelse zcolors.withAlpha(colors.primary, 0.05);
+    return zcolors.withAlpha(colors.surface, 0.0);
+}
+
+fn listRowBorder(colors: ThemeColors, selected: bool, hovered: bool) [4]f32 {
+    const row = ui_theme_runtime.getStyleSheet().list_row;
+    if (selected) return row.selected_border orelse zcolors.blend(colors.border, colors.primary, 0.35);
+    if (hovered) return row.hover_border orelse zcolors.blend(colors.border, colors.primary, 0.14);
+    return zcolors.withAlpha(colors.border, 0.55);
+}
+
+fn listRowTextColor(colors: ThemeColors, selected: bool) [4]f32 {
+    if (!selected) return colors.text_primary;
+    return ui_theme_runtime.getStyleSheet().list_row.selected_text orelse colors.text_primary;
 }
 
 fn drawEntryHeaderRow(

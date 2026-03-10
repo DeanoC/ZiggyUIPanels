@@ -4,6 +4,7 @@ const widgets = zui.widgets;
 const Rect = zui.core.Rect;
 const form_layout = zui.ui.layout.form_layout;
 const interfaces = zui.ui.panel_interfaces;
+const ui_theme_runtime = zui.ui.theme_engine.runtime;
 const zcolors = zui.theme.colors;
 
 // Reusable debug event stream viewport. The host supplies rendering and
@@ -140,7 +141,7 @@ pub fn draw(
 
         const entry_rect = Rect.fromXYWH(output_rect.min[0], cur_y, output_rect.width(), entry_h - event_gap);
         if (is_selected) {
-            host.draw_filled_rect(host.ctx, entry_rect, zcolors.withAlpha(colors.primary, 0.25));
+            host.draw_filled_rect(host.ctx, entry_rect, selectedRowFill(colors));
         }
 
         const clicked_fold_marker = host.draw_entry(
@@ -171,16 +172,11 @@ pub fn draw(
         const thumb_y = sb_track_rect.min[1] + thumb_y_ratio * (sb_track_rect.height() - thumb_height);
         const thumb_rect = Rect.fromXYWH(sb_track_rect.min[0], thumb_y, sb_width, thumb_height);
 
-        host.draw_filled_rect(host.ctx, sb_track_rect, zcolors.withAlpha(colors.border, 0.3));
+        host.draw_filled_rect(host.ctx, sb_track_rect, scrollbarTrackColor(colors));
 
         const is_hovered = thumb_rect.contains(.{ pointer.mouse_x, pointer.mouse_y });
         const dragging = host.get_scrollbar_dragging(host.ctx);
-        const thumb_color = if (dragging)
-            colors.primary
-        else if (is_hovered)
-            zcolors.blend(colors.border, colors.primary, 0.5)
-        else
-            colors.border;
+        const thumb_color = scrollbarThumbColor(colors, is_hovered, dragging);
         host.draw_filled_rect(host.ctx, thumb_rect, thumb_color);
 
         if (pointer.mouse_clicked and is_hovered) {
@@ -221,4 +217,20 @@ pub fn draw(
             host.copy_selected_event(host.ctx);
         }
     }
+}
+
+fn selectedRowFill(colors: ThemeColors) [4]f32 {
+    const row = ui_theme_runtime.getStyleSheet().list_row;
+    return row.selected_fill orelse zcolors.withAlpha(colors.primary, 0.25);
+}
+
+fn scrollbarTrackColor(colors: ThemeColors) [4]f32 {
+    return ui_theme_runtime.getStyleSheet().scrollbar.track orelse zcolors.withAlpha(colors.border, 0.3);
+}
+
+fn scrollbarThumbColor(colors: ThemeColors, hovered: bool, dragging: bool) [4]f32 {
+    const scrollbar = ui_theme_runtime.getStyleSheet().scrollbar;
+    if (dragging) return scrollbar.thumb_active orelse colors.primary;
+    if (hovered) return scrollbar.thumb_hover orelse zcolors.blend(colors.border, colors.primary, 0.5);
+    return scrollbar.thumb orelse colors.border;
 }
