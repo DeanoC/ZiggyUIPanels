@@ -400,7 +400,7 @@ fn drawProfileRow(
     action: *?interfaces.LauncherSettingsAction,
 ) f32 {
     host.draw_label(host.ctx, rect.min[0] + pad, y, "Profile", colors.text_primary);
-    const row_y = y + 20.0;
+    var row_y = y + 20.0;
     var x = rect.min[0] + pad;
     const choices = [_]struct { profile: interfaces.SettingsThemeProfile, label: []const u8 }{
         .{ .profile = .auto, .label = "Auto" },
@@ -411,7 +411,10 @@ fn drawProfileRow(
     };
     for (choices) |choice| {
         const width = buttonWidth(choice.label, button_height);
-        if (x + width > rect.max[0] - pad) break;
+        if (x + width > rect.max[0] - pad) {
+            row_y += button_height + layout.row_gap * 0.6;
+            x = rect.min[0] + pad;
+        }
         if (host.draw_button(
             host.ctx,
             Rect.fromXYWH(x, row_y, width, button_height),
