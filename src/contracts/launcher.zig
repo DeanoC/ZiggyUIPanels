@@ -21,7 +21,7 @@ pub const ConnectionProfileModel = struct {
     metadata: ?[]const u8 = null,
 };
 
-pub const ProjectCardModel = struct {
+pub const WorkspaceCardModel = struct {
     id: []const u8,
     name: []const u8,
     status: []const u8,
@@ -34,9 +34,9 @@ pub const LauncherViewModel = struct {
     connected: bool = false,
     connecting: bool = false,
     selected_profile_id: ?[]const u8 = null,
-    selected_project_id: ?[]const u8 = null,
+    selected_workspace_id: ?[]const u8 = null,
     profiles: []const ConnectionProfileModel = &.{},
-    projects: []const ProjectCardModel = &.{},
+    workspaces: []const WorkspaceCardModel = &.{},
     status_message: ?[]const u8 = null,
 };
 
@@ -46,14 +46,14 @@ pub const LauncherAction = union(enum) {
     create_profile,
     connect_selected,
     disconnect_selected,
-    refresh_projects,
-    create_project,
-    select_project: []const u8,
-    open_project: OpenProject,
+    refresh_workspaces,
+    create_workspace,
+    select_workspace: []const u8,
+    open_workspace: OpenWorkspace,
 
-    pub const OpenProject = struct {
+    pub const OpenWorkspace = struct {
         profile_id: []const u8,
-        project_id: []const u8,
+        workspace_id: []const u8,
     };
 };
 
@@ -61,5 +61,5 @@ test "launcher view model default state" {
     const view = LauncherViewModel{};
     try std.testing.expectEqualStrings("Ziggy Star Spider", view.app_title);
     try std.testing.expect(view.profiles.len == 0);
-    try std.testing.expect(view.projects.len == 0);
+    try std.testing.expect(view.workspaces.len == 0);
 }
