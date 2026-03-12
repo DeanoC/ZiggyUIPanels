@@ -5,27 +5,33 @@ const Rect = zui.core.Rect;
 const form_layout = zui.ui.layout.form_layout;
 const interfaces = zui.ui.panel_interfaces;
 
-// Reusable project workspace panel. The host owns project/workspace operations
-// while this module owns layout, scrolling, and typed action emission.
+// Reusable workspace overview panel. The host owns workspace operations while
+// this module owns layout, scrolling, and typed action emission.
 pub const FocusField = enum {
     none,
-    project_token,
+    workspace_token,
     create_name,
     create_vision,
+    template_id,
     operator_token,
     mount_path,
     mount_node_id,
     mount_export_name,
+    bind_path,
+    bind_target_path,
 };
 
 pub const TextFields = struct {
-    project_token: []const u8 = "",
+    workspace_token: []const u8 = "",
     create_name: []const u8 = "",
     create_vision: []const u8 = "",
+    template_id: []const u8 = "",
     operator_token: []const u8 = "",
     mount_path: []const u8 = "/",
     mount_node_id: []const u8 = "",
     mount_export_name: []const u8 = "",
+    bind_path: []const u8 = "/repo",
+    bind_target_path: []const u8 = "/nodes/local/fs",
 };
 
 pub const State = struct {
@@ -64,48 +70,48 @@ pub fn draw(
     layout: form_layout.Metrics,
     ui_scale: f32,
     colors: ThemeColors,
-    model: interfaces.ProjectPanelModel,
-    view: interfaces.ProjectPanelView,
+    model: interfaces.WorkspacePanelModel,
+    view: interfaces.WorkspacePanelView,
     fields: TextFields,
     pointer: PointerState,
     state: *State,
-) ?interfaces.ProjectPanelAction {
+) ?interfaces.WorkspacePanelAction {
     const pad = layout.inset;
     const rect_width = rect.max[0] - rect.min[0];
     const input_height = layout.input_height;
     const button_height = layout.button_height;
     const input_width = @max(220.0, rect_width - pad * 2.0);
     var y = rect.min[1] + pad - state.scroll_y;
-    var action: ?interfaces.ProjectPanelAction = null;
+    var action: ?interfaces.WorkspacePanelAction = null;
 
     host.draw_form_section_title(host.ctx, rect.min[0] + pad, &y, input_width, layout, view.title);
 
-    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Selected Project");
-    const project_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
+    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Selected Workspace");
+    const workspace_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
     _ = host.draw_button(
         host.ctx,
-        project_rect,
-        view.selected_project_button_label,
-        .{ .variant = .secondary, .disabled = !model.has_projects },
+        workspace_rect,
+        view.selected_workspace_button_label,
+        .{ .variant = .secondary, .disabled = !model.has_workspaces },
     );
 
     y += input_height;
     host.draw_text_trimmed(host.ctx, rect.min[0] + pad, y, input_width, view.lock_state_text, colors.text_secondary);
     y += layout.line_height + layout.row_gap * 0.45;
 
-    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Project Token (optional; required only for locked projects)");
-    const project_token_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
-    const project_token_focused = host.draw_text_input(
+    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Workspace Token (optional; required only for locked workspaces)");
+    const workspace_token_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
+    const workspace_token_focused = host.draw_text_input(
         host.ctx,
-        project_token_rect,
-        fields.project_token,
-        state.focused_field == .project_token,
-        .{ .placeholder = "proj-..." },
+        workspace_token_rect,
+        fields.workspace_token,
+        state.focused_field == .workspace_token,
+        .{ .placeholder = "workspace-..." },
     );
-    if (project_token_focused) state.focused_field = .project_token;
+    if (workspace_token_focused) state.focused_field = .workspace_token;
 
     y += input_height + layout.row_gap;
-    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Create Project Name");
+    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Create Workspace Name");
     const create_name_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
     const create_name_focused = host.draw_text_input(
         host.ctx,
@@ -129,6 +135,18 @@ pub fn draw(
     if (create_vision_focused) state.focused_field = .create_vision;
 
     y += input_height + layout.row_gap * 0.8;
+    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Template ID");
+    const template_id_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
+    const template_id_focused = host.draw_text_input(
+        host.ctx,
+        template_id_rect,
+        fields.template_id,
+        state.focused_field == .template_id,
+        .{ .placeholder = "dev" },
+    );
+    if (template_id_focused) state.focused_field = .template_id;
+
+    y += input_height + layout.row_gap * 0.8;
     host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Operator Token (optional)");
     const operator_token_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
     const operator_token_focused = host.draw_text_input(
@@ -146,28 +164,32 @@ pub fn draw(
     const refresh_rect = Rect.fromXYWH(create_rect.max[0] + pad, y, button_width, button_height);
     const activate_rect = Rect.fromXYWH(refresh_rect.max[0] + pad, y, button_width, button_height);
 
-    if (host.draw_button(host.ctx, create_rect, "Create Project", .{ .variant = .primary, .disabled = !model.can_create_project })) {
-        emitAction(&action, .create_project);
+    if (host.draw_button(host.ctx, create_rect, "Create Workspace", .{ .variant = .primary, .disabled = !model.can_create_workspace })) {
+        emitAction(&action, .create_workspace);
     }
     if (host.draw_button(host.ctx, refresh_rect, "Refresh Workspace", .{ .variant = .secondary, .disabled = model.controlsDisabled() })) {
         emitAction(&action, .refresh_workspace);
     }
-    if (host.draw_button(host.ctx, activate_rect, "Activate Project", .{ .variant = .secondary, .disabled = !model.can_activate_project })) {
-        emitAction(&action, .activate_project);
+    if (host.draw_button(host.ctx, activate_rect, "Activate Workspace", .{ .variant = .secondary, .disabled = !model.can_activate_workspace })) {
+        emitAction(&action, .activate_workspace);
     }
 
     y += button_height + layout.row_gap;
-    const lock_rect = Rect.fromXYWH(rect.min[0] + pad, y, button_width, button_height);
+    const attach_rect = Rect.fromXYWH(rect.min[0] + pad, y, button_width, button_height);
+    const lock_rect = Rect.fromXYWH(attach_rect.max[0] + pad, y, button_width, button_height);
     const unlock_rect = Rect.fromXYWH(lock_rect.max[0] + pad, y, button_width, button_height);
-    if (host.draw_button(host.ctx, lock_rect, "Lock Project", .{ .variant = .secondary, .disabled = !model.can_lock_project })) {
-        emitAction(&action, .lock_project);
+    if (host.draw_button(host.ctx, attach_rect, "Attach Session", .{ .variant = .primary, .disabled = !model.can_attach_session })) {
+        emitAction(&action, .attach_session);
     }
-    if (host.draw_button(host.ctx, unlock_rect, "Unlock Project", .{ .variant = .secondary, .disabled = !model.can_unlock_project })) {
-        emitAction(&action, .unlock_project);
+    if (host.draw_button(host.ctx, lock_rect, "Lock Workspace", .{ .variant = .secondary, .disabled = !model.can_lock_workspace })) {
+        emitAction(&action, .lock_workspace);
+    }
+    if (host.draw_button(host.ctx, unlock_rect, "Unlock Workspace", .{ .variant = .secondary, .disabled = !model.can_unlock_workspace })) {
+        emitAction(&action, .unlock_workspace);
     }
 
     y += button_height + layout.section_gap * 0.7;
-    host.draw_form_section_title(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Project Mount");
+    host.draw_form_section_title(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Workspace Mount");
 
     host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Mount Path");
     const mount_path_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
@@ -227,6 +249,43 @@ pub fn draw(
 
     y += button_height + layout.row_gap;
     if (view.mount_hint != null) y += layout.line_height;
+    y += layout.section_gap * 0.35;
+    host.draw_form_section_title(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Workspace Bind");
+
+    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Bind Path");
+    const bind_path_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
+    const bind_path_focused = host.draw_text_input(
+        host.ctx,
+        bind_path_rect,
+        fields.bind_path,
+        state.focused_field == .bind_path,
+        .{ .placeholder = "/repo" },
+    );
+    if (bind_path_focused) state.focused_field = .bind_path;
+
+    y += input_height + layout.row_gap * 0.8;
+    host.draw_form_field_label(host.ctx, rect.min[0] + pad, &y, input_width, layout, "Target Path");
+    const bind_target_rect = Rect.fromXYWH(rect.min[0] + pad, y, input_width, input_height);
+    const bind_target_focused = host.draw_text_input(
+        host.ctx,
+        bind_target_rect,
+        fields.bind_target_path,
+        state.focused_field == .bind_target_path,
+        .{ .placeholder = "/nodes/local/fs" },
+    );
+    if (bind_target_focused) state.focused_field = .bind_target_path;
+
+    y += input_height + layout.section_gap;
+    const add_bind_rect = Rect.fromXYWH(rect.min[0] + pad, y, button_width, button_height);
+    const remove_bind_rect = Rect.fromXYWH(add_bind_rect.max[0] + pad, y, button_width, button_height);
+    if (host.draw_button(host.ctx, add_bind_rect, "Add Bind", .{ .variant = .primary, .disabled = !model.can_activate_workspace })) {
+        emitAction(&action, .add_bind);
+    }
+    if (host.draw_button(host.ctx, remove_bind_rect, "Remove Bind", .{ .variant = .secondary, .disabled = !model.can_activate_workspace })) {
+        emitAction(&action, .remove_bind);
+    }
+
+    y += button_height + layout.row_gap;
     host.draw_text_trimmed(
         host.ctx,
         rect.min[0] + pad,
@@ -280,7 +339,17 @@ pub fn draw(
         host.draw_label(host.ctx, rect.min[0] + pad, y, err_text, colors.error_text);
         y += layout.line_height;
     }
-    if (view.selected_project_line) |line| {
+    if (view.session_status_line) |line| {
+        host.draw_label(
+            host.ctx,
+            rect.min[0] + pad,
+            y,
+            line,
+            if (view.session_status_warning) colors.warning_text else colors.text_secondary,
+        );
+        y += layout.line_height;
+    }
+    if (view.selected_workspace_line) |line| {
         host.draw_label(host.ctx, rect.min[0] + pad, y, line, colors.text_secondary);
         y += layout.line_height;
     }
@@ -295,6 +364,14 @@ pub fn draw(
         y += layout.line_height;
     }
     if (view.setup_vision_line) |line| {
+        host.draw_text_trimmed(host.ctx, rect.min[0] + pad, y, input_width, line, colors.text_secondary);
+        y += layout.line_height;
+    }
+    if (view.template_line) |line| {
+        host.draw_label(host.ctx, rect.min[0] + pad, y, line, colors.text_secondary);
+        y += layout.line_height;
+    }
+    if (view.binds_line) |line| {
         host.draw_text_trimmed(host.ctx, rect.min[0] + pad, y, input_width, line, colors.text_secondary);
         y += layout.line_height;
     }
@@ -318,8 +395,8 @@ pub fn draw(
     }
     y += layout.row_gap * 0.6;
 
-    if (view.projects.len > 0) {
-        host.draw_label(host.ctx, rect.min[0] + pad, y, "Project List:", colors.text_primary);
+    if (view.workspaces.len > 0) {
+        host.draw_label(host.ctx, rect.min[0] + pad, y, "Workspace List:", colors.text_primary);
         y += layout.label_to_input_gap;
         const row_h = @max(layout.button_height * 0.86, layout.line_height + layout.inner_inset);
         const row_gap = @max(1.0, layout.inner_inset * 0.3);
@@ -328,33 +405,33 @@ pub fn draw(
         const list_bottom = rect.max[1] + state.scroll_y;
         const visible_start_idx: usize = @intFromFloat(@max(0.0, @floor((rect.min[1] - list_top) / row_step)));
         const visible_end_idx_unclamped: usize = @intFromFloat(@max(0.0, @ceil((list_bottom - list_top) / row_step)));
-        const max_projects: usize = view.projects.len;
-        const visible_end_idx = @min(max_projects, visible_end_idx_unclamped + 1);
+        const max_workspaces: usize = view.workspaces.len;
+        const visible_end_idx = @min(max_workspaces, visible_end_idx_unclamped + 1);
 
         if (visible_start_idx > 0) {
             y += row_step * @as(f32, @floatFromInt(visible_start_idx));
         }
 
         var idx: usize = visible_start_idx;
-        while (idx < max_projects) : (idx += 1) {
+        while (idx < max_workspaces) : (idx += 1) {
             if (idx >= visible_end_idx) {
-                const remaining = max_projects - idx;
+                const remaining = max_workspaces - idx;
                 y += row_step * @as(f32, @floatFromInt(remaining));
                 break;
             }
-            const project = view.projects[idx];
+            const workspace_entry = view.workspaces[idx];
             const row_button_w = @max(90.0 * ui_scale, rect_width * 0.17);
             const text_max_w = @max(120.0, rect_width - (pad * 2.0) - row_button_w - pad);
             const text_y = y + @max(0.0, (row_h - layout.line_height) * 0.5);
-            host.draw_text_trimmed(host.ctx, rect.min[0] + pad, text_y, text_max_w, project.line, colors.text_secondary);
+            host.draw_text_trimmed(host.ctx, rect.min[0] + pad, text_y, text_max_w, workspace_entry.line, colors.text_secondary);
             const use_rect = Rect.fromXYWH(rect.min[0] + pad + text_max_w + pad, y, row_button_w, row_h);
             if (host.draw_button(
                 host.ctx,
                 use_rect,
-                if (project.selected) "Selected" else "Use",
-                .{ .variant = .secondary, .disabled = project.selected },
+                if (workspace_entry.selected) "Selected" else "Use",
+                .{ .variant = .secondary, .disabled = workspace_entry.selected },
             )) {
-                emitAction(&action, .{ .select_project_index = project.index });
+                emitAction(&action, .{ .select_workspace_index = workspace_entry.index });
             }
             y += row_step;
         }
@@ -381,13 +458,16 @@ pub fn draw(
 
     if (pointer.mouse_released and
         state.focused_field != .none and
-        !project_token_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
+        !workspace_token_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
         !create_name_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
         !create_vision_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
+        !template_id_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
         !operator_token_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
         !mount_path_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
         !mount_node_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
-        !mount_export_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }))
+        !mount_export_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
+        !bind_path_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and
+        !bind_target_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }))
     {
         state.focused_field = .none;
     }
@@ -401,6 +481,6 @@ pub fn draw(
     return action;
 }
 
-fn emitAction(slot: *?interfaces.ProjectPanelAction, next: interfaces.ProjectPanelAction) void {
+fn emitAction(slot: *?interfaces.WorkspacePanelAction, next: interfaces.WorkspacePanelAction) void {
     if (slot.* == null) slot.* = next;
 }

@@ -4,16 +4,16 @@ pub const IdeMenuDomain = enum {
     file,
     edit,
     view,
-    project,
+    workspace,
     tools,
     window,
     help,
 };
 
 pub const IdeMenuAction = enum {
-    file_new_project,
-    file_open_project,
-    file_switch_project,
+    file_new_workspace,
+    file_open_workspace,
+    file_switch_workspace,
     file_disconnect,
     file_exit,
 
@@ -24,8 +24,8 @@ pub const IdeMenuAction = enum {
     view_toggle_explorer,
     view_toggle_terminal,
 
-    project_refresh,
-    project_create,
+    workspace_refresh,
+    workspace_create,
 
     tools_open_settings,
 
@@ -49,11 +49,11 @@ pub const IdeMenuModel = struct {
 test "menu item metadata" {
     const item = IdeMenuItem{
         .domain = .file,
-        .action = .file_switch_project,
-        .label = "Switch Project",
+        .action = .file_switch_workspace,
+        .label = "Switch Workspace",
         .enabled = true,
     };
 
     try std.testing.expectEqual(IdeMenuDomain.file, item.domain);
-    try std.testing.expectEqual(IdeMenuAction.file_switch_project, item.action);
+    try std.testing.expectEqual(IdeMenuAction.file_switch_workspace, item.action);
 }
