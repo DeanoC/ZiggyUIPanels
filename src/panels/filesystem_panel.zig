@@ -318,6 +318,7 @@ fn drawEntryList(
 
     const content_height = @max(0.0, @as(f32, @floatFromInt(view.entries.len)) * line_advance - row_gap);
     const max_scroll = @max(0.0, content_height - rows_rect.height());
+    const ended_scrollbar_drag = state.entry_scrollbar_dragging and !pointer.mouse_down;
     if (!pointer.mouse_down) state.entry_scrollbar_dragging = false;
 
     if (rows_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and pointer.mouse_scroll_y != 0.0) {
@@ -373,7 +374,7 @@ fn drawEntryList(
             const visible = clipped_row_rect.width() > 0.0 and clipped_row_rect.height() > 0.0;
             const hovered = visible and rowRectHovered(clipped_row_rect, pointer);
             if (visible) drawEntryRow(host, row_rect, cols, layout, entry, colors, hovered);
-            if (visible and pointer.mouse_released and !model.busy and clipped_row_rect.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
+            if (visible and pointer.mouse_released and !ended_scrollbar_drag and !model.busy and clipped_row_rect.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
                 const now = std.time.milliTimestamp();
                 if (state.last_clicked_entry_index != null and state.last_clicked_entry_index.? == entry.index and now - state.last_click_ms <= double_click_ms) {
                     emitAction(action, .{ .open_entry_index = entry.index });
