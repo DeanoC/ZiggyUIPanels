@@ -18,7 +18,10 @@ pub const FocusField = enum {
 
 pub const State = struct {
     focused_field: FocusField = .none,
-    entry_page: usize = 0,
+    entry_scroll_y: f32 = 0.0,
+    entry_scrollbar_dragging: bool = false,
+    entry_scrollbar_drag_anchor: f32 = 0.0,
+    entry_scrollbar_drag_scroll: f32 = 0.0,
     last_clicked_entry_index: ?usize = null,
     last_click_ms: i64 = 0,
     preview_split_ratio: f32 = 0.28,
@@ -42,6 +45,7 @@ pub const PointerState = struct {
     mouse_down: bool,
     mouse_clicked: bool,
     mouse_released: bool,
+    mouse_scroll_y: f32 = 0.0,
 };
 
 pub const ThemeColors = struct {
@@ -61,6 +65,8 @@ pub const Host = struct {
     draw_button: *const fn (ctx: *anyopaque, rect: Rect, label: []const u8, opts: widgets.button.Options) bool,
     draw_surface_panel: *const fn (ctx: *anyopaque, rect: Rect) void,
     draw_text_wrapped: *const fn (ctx: *anyopaque, x: f32, y: f32, max_w: f32, text: []const u8, color: [4]f32) f32,
+    push_clip: *const fn (ctx: *anyopaque, rect: Rect) void,
+    pop_clip: *const fn (ctx: *anyopaque) void,
     draw_filled_rect: *const fn (ctx: *anyopaque, rect: Rect, color: [4]f32) void,
     draw_rect: *const fn (ctx: *anyopaque, rect: Rect, color: [4]f32) void,
 };
@@ -78,6 +84,9 @@ const min_type_column_width: f32 = 72.0;
 const min_modified_column_width: f32 = 96.0;
 const min_size_column_width: f32 = 56.0;
 const double_click_ms: i64 = 350;
+const entry_scrollbar_track_width: f32 = 10.0;
+const entry_scrollbar_min_thumb_h: f32 = 24.0;
+const entry_scroll_step: f32 = 36.0;
 
 pub fn draw(
     host: Host,
@@ -271,10 +280,9 @@ fn drawEntryList(
 ) void {
     const inner = @max(8.0, layout.inner_inset * 0.8);
     const row_gap = @max(2.0, layout.row_gap * 0.28);
-    const pager_h = @max(24.0, layout.button_height * 0.68);
-    const pager_gap = layout.row_gap * 0.4;
     const list_header_h = layout.line_height + inner * 0.7;
     const row_h = @max(layout.line_height + inner * 1.2, 30.0);
+    const line_advance = row_h + row_gap;
 
     host.draw_surface_panel(host.ctx, rect);
     host.draw_text_trimmed(host.ctx, rect.min[0] + inner, rect.min[1] + inner * 0.7, rect.width() - inner * 2.0, "Files", colors.text_primary);
@@ -289,69 +297,127 @@ fn drawEntryList(
     host.draw_text_trimmed(host.ctx, rect.min[0] + inner + 58.0, rect.min[1] + inner * 0.7, rect.width() - inner * 2.0 - 58.0, subtitle, colors.text_secondary);
 
     const body_top = rect.min[1] + layout.line_height + inner * 1.35;
-    const body_h = @max(0.0, rect.height() - (body_top - rect.min[1]) - inner);
-    const rows_without_pager = @max(1, @as(usize, @intFromFloat(@floor((body_h + row_gap) / (row_h + row_gap)))));
-    const needs_pager = view.entries.len > rows_without_pager;
-    const rows_per_page = if (needs_pager)
-        @max(1, @as(usize, @intFromFloat(@floor((@max(0.0, body_h - pager_h - pager_gap) + row_gap) / (row_h + row_gap)))))
-    else
-        rows_without_pager;
-    const page_count = @max(1, std.math.divCeil(usize, view.entries.len, rows_per_page) catch 1);
-    if (state.entry_page >= page_count) state.entry_page = page_count - 1;
-
-    var list_y = body_top;
-    if (needs_pager) {
-        const button_w: f32 = @max(54.0, @min(72.0, rect.width() * 0.14));
-        const prev_rect = Rect.fromXYWH(rect.min[0] + inner, list_y, button_w, pager_h);
-        const next_rect = Rect.fromXYWH(rect.max[0] - inner - button_w, list_y, button_w, pager_h);
-        if (host.draw_button(host.ctx, prev_rect, "Prev", .{ .variant = .ghost, .disabled = state.entry_page == 0 })) state.entry_page -= 1;
-        if (host.draw_button(host.ctx, next_rect, "Next", .{ .variant = .ghost, .disabled = state.entry_page + 1 >= page_count })) state.entry_page += 1;
-
-        var page_buf: [80]u8 = undefined;
-        const start_ordinal = state.entry_page * rows_per_page + 1;
-        const end_ordinal = @min(view.entries.len, (state.entry_page + 1) * rows_per_page);
-        const page_text = std.fmt.bufPrint(&page_buf, "Rows {d}-{d} of {d}", .{ start_ordinal, end_ordinal, view.entries.len }) catch "Rows";
-        host.draw_text_trimmed(host.ctx, prev_rect.max[0] + inner, list_y + @max(0.0, (pager_h - layout.line_height) * 0.5), @max(0.0, next_rect.min[0] - prev_rect.max[0] - inner * 2.0), page_text, colors.text_secondary);
-        list_y += pager_h + pager_gap;
-    }
-
-    const column_header_rect = Rect.fromXYWH(rect.min[0] + inner, list_y, rect.width() - inner * 2.0, list_header_h);
+    const column_header_rect = Rect.fromXYWH(rect.min[0] + inner, body_top, rect.width() - inner * 2.0, list_header_h);
     const was_resizing = state.column_resize != .none;
     const pointer_on_resize_handle = headerPointerOnResizeHandle(column_header_rect, inner, pointer, state);
     handleColumnResize(column_header_rect, inner, pointer, state);
     const cols = entryColumns(column_header_rect, inner, state);
     drawEntryHeaderRow(host, column_header_rect, cols, layout, model, colors, pointer, state, action, was_resizing or state.column_resize != .none or pointer_on_resize_handle);
-    list_y += list_header_h + row_gap;
+    const rows_top = body_top + list_header_h + row_gap;
+    const rows_height = @max(0.0, rect.max[1] - inner - rows_top);
+    const rows_rect = Rect.fromXYWH(rect.min[0] + inner, rows_top, rect.width() - inner * 2.0, rows_height);
 
     if (view.entries.len == 0) {
         const empty_text = if (model.hasActiveFilters())
             "No entries match the active explorer filters"
         else
             "This directory has no visible entries yet";
-        _ = host.draw_text_wrapped(host.ctx, rect.min[0] + inner, list_y + inner * 0.4, rect.width() - inner * 2.0, empty_text, colors.text_secondary);
+        _ = host.draw_text_wrapped(host.ctx, rows_rect.min[0], rows_rect.min[1] + inner * 0.4, rows_rect.width(), empty_text, colors.text_secondary);
         return;
     }
 
-    const start_idx = @min(view.entries.len, state.entry_page * rows_per_page);
-    const end_idx = @min(view.entries.len, start_idx + rows_per_page);
-    var idx: usize = start_idx;
-    while (idx < end_idx) : (idx += 1) {
-        const entry = view.entries[idx];
-        const row_rect = Rect.fromXYWH(rect.min[0] + inner, list_y, rect.width() - inner * 2.0, row_h);
-        const hovered = rowRectHovered(row_rect, pointer);
-        drawEntryRow(host, row_rect, cols, layout, entry, colors, hovered);
-        if (pointer.mouse_released and !model.busy and row_rect.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
-            const now = std.time.milliTimestamp();
-            if (state.last_clicked_entry_index != null and state.last_clicked_entry_index.? == entry.index and now - state.last_click_ms <= double_click_ms) {
-                emitAction(action, .{ .open_entry_index = entry.index });
-            } else {
-                emitAction(action, .{ .select_entry_index = entry.index });
-            }
-            state.last_clicked_entry_index = entry.index;
-            state.last_click_ms = now;
-        }
-        list_y += row_h + row_gap;
+    const content_height = @max(0.0, @as(f32, @floatFromInt(view.entries.len)) * line_advance - row_gap);
+    const max_scroll = @max(0.0, content_height - rows_rect.height());
+    const ended_scrollbar_drag = state.entry_scrollbar_dragging and !pointer.mouse_down;
+    if (!pointer.mouse_down) state.entry_scrollbar_dragging = false;
+
+    if (rows_rect.contains(.{ pointer.mouse_x, pointer.mouse_y }) and pointer.mouse_scroll_y != 0.0) {
+        state.entry_scroll_y -= pointer.mouse_scroll_y * entry_scroll_step;
     }
+
+    if (state.entry_scroll_y < 0.0) state.entry_scroll_y = 0.0;
+    if (state.entry_scroll_y > max_scroll) state.entry_scroll_y = max_scroll;
+
+    const scrollbar_track = entryScrollbarTrackRect(rows_rect);
+    const scrollbar_thumb = entryScrollbarThumbRect(rows_rect, state.entry_scroll_y, max_scroll);
+
+    if (max_scroll > 0.0) {
+        if (pointer.mouse_clicked and scrollbar_track.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
+            if (scrollbar_thumb.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
+                state.entry_scrollbar_dragging = true;
+                state.entry_scrollbar_drag_anchor = pointer.mouse_y;
+                state.entry_scrollbar_drag_scroll = state.entry_scroll_y;
+            } else {
+                const usable = @max(1.0, scrollbar_track.height() - scrollbar_thumb.height());
+                const target = std.math.clamp(
+                    pointer.mouse_y - scrollbar_track.min[1] - scrollbar_thumb.height() * 0.5,
+                    0.0,
+                    usable,
+                );
+                state.entry_scroll_y = (target / usable) * max_scroll;
+            }
+        }
+        if (state.entry_scrollbar_dragging and pointer.mouse_down) {
+            const usable = @max(1.0, scrollbar_track.height() - scrollbar_thumb.height());
+            const delta = pointer.mouse_y - state.entry_scrollbar_drag_anchor;
+            state.entry_scroll_y = state.entry_scrollbar_drag_scroll + (delta / usable) * max_scroll;
+            if (state.entry_scroll_y < 0.0) state.entry_scroll_y = 0.0;
+            if (state.entry_scroll_y > max_scroll) state.entry_scroll_y = max_scroll;
+        }
+    }
+
+    const content_rect = if (max_scroll > 0.0)
+        Rect.fromXYWH(rows_rect.min[0], rows_rect.min[1], @max(0.0, rows_rect.width() - entry_scrollbar_track_width - inner * 0.5), rows_rect.height())
+    else
+        rows_rect;
+
+    const start_idx = @min(view.entries.len, @as(usize, @intFromFloat(@floor(state.entry_scroll_y / line_advance))));
+    var list_y = content_rect.min[1] - @mod(state.entry_scroll_y, line_advance);
+    var idx: usize = start_idx;
+    {
+        host.push_clip(host.ctx, content_rect);
+        defer host.pop_clip(host.ctx);
+        while (idx < view.entries.len and list_y < content_rect.max[1]) : (idx += 1) {
+            const entry = view.entries[idx];
+            const row_rect = Rect.fromXYWH(content_rect.min[0], list_y, content_rect.width(), row_h);
+            const clipped_row_rect = rectIntersection(row_rect, content_rect);
+            const visible = clipped_row_rect.width() > 0.0 and clipped_row_rect.height() > 0.0;
+            const hovered = visible and rowRectHovered(clipped_row_rect, pointer);
+            if (visible) drawEntryRow(host, row_rect, cols, layout, entry, colors, hovered);
+            if (visible and pointer.mouse_released and !ended_scrollbar_drag and !model.busy and clipped_row_rect.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
+                const now = std.time.milliTimestamp();
+                if (state.last_clicked_entry_index != null and state.last_clicked_entry_index.? == entry.index and now - state.last_click_ms <= double_click_ms) {
+                    emitAction(action, .{ .open_entry_index = entry.index });
+                } else {
+                    emitAction(action, .{ .select_entry_index = entry.index });
+                }
+                state.last_clicked_entry_index = entry.index;
+                state.last_click_ms = now;
+            }
+            list_y += line_advance;
+        }
+    }
+
+    if (max_scroll > 0.0) {
+        drawEntryScrollbar(host, rows_rect, state.entry_scroll_y, max_scroll, colors);
+    }
+}
+
+fn entryScrollbarTrackRect(rect: Rect) Rect {
+    return Rect.fromXYWH(
+        rect.max[0] - entry_scrollbar_track_width,
+        rect.min[1],
+        entry_scrollbar_track_width,
+        rect.height(),
+    );
+}
+
+fn entryScrollbarThumbRect(rect: Rect, scroll_y: f32, max_scroll: f32) Rect {
+    const track = entryScrollbarTrackRect(rect);
+    if (max_scroll <= 0.0) return track;
+    const view_h = rect.height();
+    const thumb_h = @max(entry_scrollbar_min_thumb_h, view_h * (view_h / (view_h + max_scroll)));
+    const thumb_y = rect.min[1] + (scroll_y / max_scroll) * @max(0.0, view_h - thumb_h);
+    return Rect.fromXYWH(track.min[0], thumb_y, track.width(), thumb_h);
+}
+
+fn drawEntryScrollbar(host: Host, rect: Rect, scroll_y: f32, max_scroll: f32, colors: ThemeColors) void {
+    if (max_scroll <= 0.0) return;
+    const track = entryScrollbarTrackRect(rect);
+    const thumb = entryScrollbarThumbRect(rect, scroll_y, max_scroll);
+    host.draw_filled_rect(host.ctx, track, zcolors.withAlpha(colors.border, 0.16));
+    host.draw_filled_rect(host.ctx, thumb, zcolors.withAlpha(colors.primary, 0.42));
+    host.draw_rect(host.ctx, track, zcolors.withAlpha(colors.border, 0.4));
 }
 
 fn drawEntryRow(
@@ -723,6 +789,15 @@ fn kindLabel(kind: interfaces.FilesystemEntryKind) []const u8 {
 
 fn rowRectHovered(rect: Rect, pointer: PointerState) bool {
     return rect.contains(.{ pointer.mouse_x, pointer.mouse_y });
+}
+
+fn rectIntersection(a: Rect, b: Rect) Rect {
+    const min_x = @max(a.min[0], b.min[0]);
+    const min_y = @max(a.min[1], b.min[1]);
+    const max_x = @min(a.max[0], b.max[0]);
+    const max_y = @min(a.max[1], b.max[1]);
+    if (max_x <= min_x or max_y <= min_y) return Rect.fromXYWH(min_x, min_y, 0.0, 0.0);
+    return Rect.fromXYWH(min_x, min_y, max_x - min_x, max_y - min_y);
 }
 
 fn emitAction(slot: *?interfaces.FilesystemPanelAction, next: interfaces.FilesystemPanelAction) void {
