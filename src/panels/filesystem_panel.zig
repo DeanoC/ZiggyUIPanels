@@ -65,6 +65,8 @@ pub const Host = struct {
     draw_button: *const fn (ctx: *anyopaque, rect: Rect, label: []const u8, opts: widgets.button.Options) bool,
     draw_surface_panel: *const fn (ctx: *anyopaque, rect: Rect) void,
     draw_text_wrapped: *const fn (ctx: *anyopaque, x: f32, y: f32, max_w: f32, text: []const u8, color: [4]f32) f32,
+    push_clip: *const fn (ctx: *anyopaque, rect: Rect) void,
+    pop_clip: *const fn (ctx: *anyopaque) void,
     draw_filled_rect: *const fn (ctx: *anyopaque, rect: Rect, color: [4]f32) void,
     draw_rect: *const fn (ctx: *anyopaque, rect: Rect, color: [4]f32) void,
 };
@@ -361,13 +363,16 @@ fn drawEntryList(
     const start_idx = @min(view.entries.len, @as(usize, @intFromFloat(@floor(state.entry_scroll_y / line_advance))));
     var list_y = content_rect.min[1] - @mod(state.entry_scroll_y, line_advance);
     var idx: usize = start_idx;
+    host.push_clip(host.ctx, content_rect);
+    defer host.pop_clip(host.ctx);
     while (idx < view.entries.len and list_y < content_rect.max[1]) : (idx += 1) {
         const entry = view.entries[idx];
         const row_rect = Rect.fromXYWH(content_rect.min[0], list_y, content_rect.width(), row_h);
-        const visible = row_rect.max[1] > content_rect.min[1] and row_rect.min[1] < content_rect.max[1];
-        const hovered = visible and rowRectHovered(row_rect, pointer);
+        const clipped_row_rect = rectIntersection(row_rect, content_rect);
+        const visible = clipped_row_rect.width() > 0.0 and clipped_row_rect.height() > 0.0;
+        const hovered = visible and rowRectHovered(clipped_row_rect, pointer);
         if (visible) drawEntryRow(host, row_rect, cols, layout, entry, colors, hovered);
-        if (visible and pointer.mouse_released and !model.busy and row_rect.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
+        if (visible and pointer.mouse_released and !model.busy and clipped_row_rect.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
             const now = std.time.milliTimestamp();
             if (state.last_clicked_entry_index != null and state.last_clicked_entry_index.? == entry.index and now - state.last_click_ms <= double_click_ms) {
                 emitAction(action, .{ .open_entry_index = entry.index });
@@ -781,6 +786,15 @@ fn kindLabel(kind: interfaces.FilesystemEntryKind) []const u8 {
 
 fn rowRectHovered(rect: Rect, pointer: PointerState) bool {
     return rect.contains(.{ pointer.mouse_x, pointer.mouse_y });
+}
+
+fn rectIntersection(a: Rect, b: Rect) Rect {
+    const min_x = @max(a.min[0], b.min[0]);
+    const min_y = @max(a.min[1], b.min[1]);
+    const max_x = @min(a.max[0], b.max[0]);
+    const max_y = @min(a.max[1], b.max[1]);
+    if (max_x <= min_x or max_y <= min_y) return Rect.fromXYWH(min_x, min_y, 0.0, 0.0);
+    return Rect.fromXYWH(min_x, min_y, max_x - min_x, max_y - min_y);
 }
 
 fn emitAction(slot: *?interfaces.FilesystemPanelAction, next: interfaces.FilesystemPanelAction) void {
