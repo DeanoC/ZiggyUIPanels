@@ -363,26 +363,28 @@ fn drawEntryList(
     const start_idx = @min(view.entries.len, @as(usize, @intFromFloat(@floor(state.entry_scroll_y / line_advance))));
     var list_y = content_rect.min[1] - @mod(state.entry_scroll_y, line_advance);
     var idx: usize = start_idx;
-    host.push_clip(host.ctx, content_rect);
-    defer host.pop_clip(host.ctx);
-    while (idx < view.entries.len and list_y < content_rect.max[1]) : (idx += 1) {
-        const entry = view.entries[idx];
-        const row_rect = Rect.fromXYWH(content_rect.min[0], list_y, content_rect.width(), row_h);
-        const clipped_row_rect = rectIntersection(row_rect, content_rect);
-        const visible = clipped_row_rect.width() > 0.0 and clipped_row_rect.height() > 0.0;
-        const hovered = visible and rowRectHovered(clipped_row_rect, pointer);
-        if (visible) drawEntryRow(host, row_rect, cols, layout, entry, colors, hovered);
-        if (visible and pointer.mouse_released and !model.busy and clipped_row_rect.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
-            const now = std.time.milliTimestamp();
-            if (state.last_clicked_entry_index != null and state.last_clicked_entry_index.? == entry.index and now - state.last_click_ms <= double_click_ms) {
-                emitAction(action, .{ .open_entry_index = entry.index });
-            } else {
-                emitAction(action, .{ .select_entry_index = entry.index });
+    {
+        host.push_clip(host.ctx, content_rect);
+        defer host.pop_clip(host.ctx);
+        while (idx < view.entries.len and list_y < content_rect.max[1]) : (idx += 1) {
+            const entry = view.entries[idx];
+            const row_rect = Rect.fromXYWH(content_rect.min[0], list_y, content_rect.width(), row_h);
+            const clipped_row_rect = rectIntersection(row_rect, content_rect);
+            const visible = clipped_row_rect.width() > 0.0 and clipped_row_rect.height() > 0.0;
+            const hovered = visible and rowRectHovered(clipped_row_rect, pointer);
+            if (visible) drawEntryRow(host, row_rect, cols, layout, entry, colors, hovered);
+            if (visible and pointer.mouse_released and !model.busy and clipped_row_rect.contains(.{ pointer.mouse_x, pointer.mouse_y })) {
+                const now = std.time.milliTimestamp();
+                if (state.last_clicked_entry_index != null and state.last_clicked_entry_index.? == entry.index and now - state.last_click_ms <= double_click_ms) {
+                    emitAction(action, .{ .open_entry_index = entry.index });
+                } else {
+                    emitAction(action, .{ .select_entry_index = entry.index });
+                }
+                state.last_clicked_entry_index = entry.index;
+                state.last_click_ms = now;
             }
-            state.last_clicked_entry_index = entry.index;
-            state.last_click_ms = now;
+            list_y += line_advance;
         }
-        list_y += line_advance;
     }
 
     if (max_scroll > 0.0) {
